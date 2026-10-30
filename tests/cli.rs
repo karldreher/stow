@@ -26,3 +26,13 @@ fn silent_flag_is_accepted_before_and_after_the_subcommand() {
     }
     assert!(!Cli::try_parse_from(["stow", "serve"]).unwrap().silent);
 }
+
+#[test]
+fn max_value_size_defaults_to_1024_and_is_configurable() {
+    use stow::cli::Command;
+    let size = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+        Command::Serve(serve) => serve.max_value_size,
+    };
+    assert_eq!(size(&["stow", "serve"]), 1024);
+    assert_eq!(size(&["stow", "serve", "--max-value-size", "65536"]), 65536);
+}

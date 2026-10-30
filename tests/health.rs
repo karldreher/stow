@@ -16,9 +16,11 @@ async fn health_returns_ok_and_version() {
     let (tx, rx) = oneshot::channel::<()>();
     let handle = tokio::spawn(server::serve(
         listener,
+        Default::default(),
         async move {
             let _ = rx.await;
         },
+        stow::cli::DEFAULT_MAX_VALUE_SIZE,
         true,
     ));
 

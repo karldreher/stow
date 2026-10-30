@@ -6,6 +6,7 @@
 
 use std::net::SocketAddr;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use clap::Parser;
 use stow::cli::{Cli, Command, ServeArgs};
@@ -30,5 +31,12 @@ async fn main() -> ExitCode {
 /// Runs `stow serve`.
 async fn serve(args: ServeArgs, silent: bool) -> Result<(), ServerError> {
     let listener = server::bind(SocketAddr::new(args.host, args.port)).await?;
-    server::serve(listener, server::shutdown_signal(), silent).await
+    server::serve(
+        listener,
+        Arc::default(),
+        server::shutdown_signal(),
+        args.max_value_size,
+        silent,
+    )
+    .await
 }

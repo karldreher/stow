@@ -1,23 +1,23 @@
-//! stow: a minimal local in-memory key-value server for agent coordination.
+//! stow: a minimal local in-memory key-value server for process coordination.
 //!
 //! # Architecture
 //!
-//! Control flows in one direction: [`cli`] → [`server`] → store.
+//! Control flows in one direction: [`cli`] → [`server`] → [`store`].
 //!
 //! - [`cli`] parses command-line arguments into typed structs.
 //! - [`server`] binds a loopback TCP listener and serves the HTTP/JSON API
 //!   under `/api/v1/`.
-//! - The store (added by a later issue) holds the key-value state.
+//! - [`store`] holds the key-value state in memory.
 //!
 //! # Concurrency model
 //!
 //! The binary runs on a single-threaded tokio runtime (`current_thread`).
-//! Concurrency comes from async I/O. The store will sit behind one lock, so
+//! Concurrency comes from async I/O. The store sits behind one lock, so
 //! every mutation is serialized and therefore linearizable.
 //!
 //! # Extension points
 //!
-//! - KV routes are added to [`server::router`].
+//! - New routes are added to [`server::router`].
 //! - `--save-file` persistence runs from [`server::on_shutdown`].
 //! - `--openapi` adds a route in [`server::router`] and a flag in
 //!   [`cli::ServeArgs`].
@@ -28,3 +28,4 @@
 
 pub mod cli;
 pub mod server;
+pub mod store;
