@@ -7,6 +7,7 @@
 //! - [`cli`] parses command-line arguments into typed structs.
 //! - [`server`] binds a loopback TCP listener and serves the HTTP/JSON API
 //!   under `/api/v1/`.
+//! - [`persist`] reads and writes the optional `--save-file`.
 //! - [`store`] holds the key-value state in memory.
 //!
 //! # Concurrency model
@@ -18,7 +19,8 @@
 //! # Extension points
 //!
 //! - New routes are added to [`server::router`].
-//! - `--save-file` persistence runs from [`server::on_shutdown`].
+//! - `--save-file` is loaded in `main` before binding and saved from
+//!   [`server::on_shutdown`].
 //! - `--openapi` adds a route in [`server::router`] and a flag in
 //!   [`cli::ServeArgs`].
 
@@ -27,5 +29,6 @@
 #![warn(clippy::missing_docs_in_private_items)]
 
 pub mod cli;
+pub mod persist;
 pub mod server;
 pub mod store;

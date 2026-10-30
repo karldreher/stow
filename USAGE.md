@@ -9,11 +9,21 @@ stow serve                          # listens on 127.0.0.1:7319
 stow serve --port 8080
 stow serve --max-value-size 65536   # default is 1024 bytes
 stow -q serve                       # no status output; errors still print
+stow serve --save-file ./stow.bin   # keep state across restarts
 ```
 
 ## Key-value API
 
 Values are limited to 1024 bytes by default; change it with `stow serve --max-value-size <BYTES>`. Larger values get a `413` response. Keys are 1 to 32 bytes and may contain `/`.
+
+## Save file
+
+Without `--save-file`, stow never touches disk. With `stow serve --save-file <PATH>`, stow loads the file at startup and writes it once on SIGINT or SIGTERM. Missing parent directories are created.
+
+- A missing file starts an empty store.
+- A file with bad magic bytes, an unknown format version, or a corrupt payload stops startup with exit code 1 and an error naming the file. stow does not overwrite it.
+- Remaining TTLs are preserved; entries that expired while stopped are dropped.
+- The write is atomic (temp file, `fsync`, rename), so a failed save leaves the previous file intact. SIGKILL or a crash skips the save and loses changes since the last start.
 
 ```sh
 # set (raw body, or JSON)

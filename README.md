@@ -52,6 +52,6 @@ curl http://127.0.0.1:7319/api/v1/keys
 curl -X DELETE http://127.0.0.1:7319/api/v1/delete/greeting
 ```
 
-Data lives in memory only and is lost when the server stops.
+Data lives in memory only and is lost when the server stops, unless you pass `--save-file <PATH>` to restore it on the next start (see [USAGE.md](USAGE.md)).
 
 For more examples, including conditional writes, expiring leases, and the full API reference, see [USAGE.md](USAGE.md).
