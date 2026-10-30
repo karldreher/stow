@@ -38,6 +38,16 @@ fn max_value_size_defaults_to_1024_and_is_configurable() {
 }
 
 #[test]
+fn max_value_size_is_capped_at_one_mebibyte() {
+    use stow::cli::Command;
+    let parse = |size: &str| Cli::try_parse_from(["stow", "serve", "--max-value-size", size]);
+    let Command::Serve(serve) = parse("1048576").unwrap().command;
+    assert_eq!(serve.max_value_size, 1_048_576);
+    let err = parse("1048577").unwrap_err();
+    assert!(err.to_string().contains("1 MiB"), "{err}");
+}
+
+#[test]
 fn openapi_flag_defaults_to_off() {
     use stow::cli::Command;
     let openapi = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
