@@ -37,7 +37,7 @@ While there are other ways, including writing to a local filesystem, this projec
 
 # Install
 
-Download the archive for your platform (macOS and Linux, arm64 and x86_64) from the [releases page](https://github.com/karldreher/stow/releases). Each release includes a `SHA256SUMS` file to check the download against. Extract the archive and put the `stow` binary somewhere on your `PATH`.
+Download the archive for your platform (macOS and Linux, arm64 and x86_64) from the [releases page](https://github.com/karldreher/stow/releases). Extract the archive and put the `stow` binary somewhere on your `PATH`.
 
 With a Rust toolchain you can build from source instead:
 
