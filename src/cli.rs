@@ -15,7 +15,7 @@ pub const DEFAULT_MAX_VALUE_SIZE: usize = 1024;
 #[command(
     name = "stow",
     version,
-    about = "Minimal local in-memory key-value server for agent coordination",
+    about = "Minimal local in-memory key-value server",
     arg_required_else_help = true,
     after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --host 127.0.0.1 --port 9000\n  stow -q serve"
 )]

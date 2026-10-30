@@ -1,4 +1,4 @@
-//! stow: a minimal local in-memory key-value server for agent coordination.
+//! stow: a minimal local in-memory key-value server for process coordination.
 //!
 //! # Architecture
 //!

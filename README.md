@@ -50,7 +50,8 @@ Errors use one envelope: `{"error":{"code":"not_found","message":"..."}}`. `form
 
 Each condition is checked and applied in one step under the store lock, so exactly one concurrent caller wins.
 
-**Consensus (first writer wins).** Every agent proposes a value; losers get `409` and adopt the winner's value from `current`.
+**Consensus (first writer wins).** 
+Each caller proposes a value; losers get `409` and adopt the winner's value from `current`.
 
 ```sh
 curl -s -w '\n%{http_code}\n' -X PUT --data-binary 'plan-b' \
