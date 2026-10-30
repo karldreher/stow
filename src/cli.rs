@@ -36,7 +36,7 @@ pub struct Cli {
 pub enum Command {
     /// Start the HTTP server in the foreground.
     #[command(
-        after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --max-value-size 65536"
+        after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --max-value-size 65536\n  stow serve --openapi"
     )]
     Serve(ServeArgs),
 }
@@ -57,6 +57,10 @@ pub struct ServeArgs {
     /// 413 response.
     #[arg(long, default_value_t = DEFAULT_MAX_VALUE_SIZE)]
     pub max_value_size: usize,
+
+    /// Serve the OpenAPI 3.1 document at `GET /api/v1/openapi.json`.
+    #[arg(long)]
+    pub openapi: bool,
 }
 
 /// Parses `--host`, rejecting wildcard addresses.

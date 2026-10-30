@@ -21,6 +21,7 @@ async fn health_returns_ok_and_version() {
             let _ = rx.await;
         },
         stow::cli::DEFAULT_MAX_VALUE_SIZE,
+        false,
         true,
     ));
 

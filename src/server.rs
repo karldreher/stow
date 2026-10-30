@@ -9,13 +9,14 @@ use std::time::{Duration, Instant};
 
 use axum::extract::rejection::{BytesRejection, JsonRejection, PathRejection, QueryRejection};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
+use utoipa::{IntoParams, OpenApi, ToSchema};
 
 use crate::store::{Condition, Current, DeleteOutcome, MAX_KEY_LEN, SetOutcome, Store};
 
@@ -51,7 +52,7 @@ impl From<io::Error> for ServerError {
 }
 
 /// Body of `GET /api/v1/health`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct Health {
     /// Always `"ok"` while the server can answer requests.
     status: &'static str,
@@ -60,6 +61,11 @@ struct Health {
 }
 
 /// Handles `GET /api/v1/health`.
+#[utoipa::path(
+    get,
+    path = "/api/v1/health",
+    responses((status = 200, description = "The server is up.", body = Health))
+)]
 async fn health() -> Json<Health> {
     Json(Health {
         status: "ok",
@@ -90,7 +96,7 @@ struct ApiError {
 }
 
 /// The `current` object of a 409 response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct CurrentBody {
     /// The blocking value; `null` when it is not valid UTF-8 (fetch it with a
     /// plain GET instead).
@@ -144,7 +150,7 @@ impl ApiError {
 }
 
 /// Body of an error response.
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct ErrorEnvelope<'a> {
     /// The error detail.
     error: ErrorBody<'a>,
@@ -153,8 +159,8 @@ struct ErrorEnvelope<'a> {
     current: Option<&'a CurrentBody>,
 }
 
-/// Inner object of [`ErrorEnvelope`].
-#[derive(Serialize)]
+/// Inner object of `ErrorEnvelope`.
+#[derive(Serialize, ToSchema)]
 struct ErrorBody<'a> {
     /// Stable machine-readable error code.
     code: &'a str,
@@ -226,7 +232,7 @@ fn validate_key(key: &str) -> Result<(), ApiError> {
 }
 
 /// Response of both set endpoints.
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct SetResponse {
     /// The key that was written.
     key: String,
@@ -235,7 +241,7 @@ struct SetResponse {
 }
 
 /// Request body of `POST /api/v1/set`.
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct SetRequest {
     /// Key to write.
     key: String,
@@ -244,7 +250,7 @@ struct SetRequest {
 }
 
 /// Representation requested through `?format=`.
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 enum Format {
     /// `{"key","value","version"}` instead of the raw bytes.
@@ -255,9 +261,10 @@ enum Format {
 const MAX_TTL_SECS: u64 = 86_400;
 
 /// Query string of both set endpoints.
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 struct SetQuery {
-    /// Lease length in seconds, 1 to [`MAX_TTL_SECS`]; no expiry when absent.
+    /// Lease length in seconds, 1 to 86400 (24 hours); no expiry when absent.
     ttl: Option<u64>,
     /// Write only if the key is absent.
     if_absent: Option<bool>,
@@ -295,21 +302,23 @@ impl SetQuery {
 }
 
 /// Query string of `DELETE /api/v1/delete/{key}`.
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 struct DeleteQuery {
     /// Delete only if the current value equals this string.
     if_value: Option<String>,
 }
 
 /// Query string of `GET /api/v1/get/{key}`.
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 struct GetQuery {
     /// Optional response representation; raw bytes when absent.
     format: Option<Format>,
 }
 
 /// Body of `GET /api/v1/get/{key}?format=json`.
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct ValueResponse<'a> {
     /// The requested key.
     key: &'a str,
@@ -322,13 +331,49 @@ struct ValueResponse<'a> {
 }
 
 /// Query string of `GET /api/v1/keys`.
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 struct KeysQuery {
     /// Only keys starting with this prefix are listed.
     prefix: Option<String>,
 }
 
+/// Body of `DELETE /api/v1/delete/{key}`.
+#[derive(Serialize, ToSchema)]
+struct DeleteResponse {
+    /// Always `true`; failures use the error envelope instead.
+    deleted: bool,
+}
+
+/// Body of `GET /api/v1/keys`.
+#[derive(Serialize, ToSchema)]
+struct KeysResponse {
+    /// Live keys matching the prefix.
+    keys: Vec<String>,
+}
+
 /// Handles `GET /api/v1/get/{*key}`.
+#[utoipa::path(
+    get,
+    path = "/api/v1/get/{key}",
+    params(
+        GetQuery,
+        ("key" = String, Path, description = "Key of 1 to 32 bytes; may contain `/`.")
+    ),
+    responses(
+        (
+            status = 200,
+            description = "The value: raw bytes, or JSON when `format=json`.",
+            content(
+                (String = "application/octet-stream"),
+                (ValueResponse = "application/json")
+            )
+        ),
+        (status = 400, description = "Invalid key or query.", body = ErrorEnvelope),
+        (status = 404, description = "The key does not exist.", body = ErrorEnvelope),
+        (status = 406, description = "`format=json` on a value that is not UTF-8.", body = ErrorEnvelope)
+    )
+)]
 async fn get_value(
     State(state): State<AppState>,
     key: Result<Path<String>, PathRejection>,
@@ -383,6 +428,26 @@ fn write(
 }
 
 /// Handles `PUT /api/v1/set/{*key}`; the body is the raw value.
+#[utoipa::path(
+    put,
+    path = "/api/v1/set/{key}",
+    params(
+        SetQuery,
+        ("key" = String, Path, description = "Key of 1 to 32 bytes; may contain `/`.")
+    ),
+    request_body(
+        content = String,
+        content_type = "application/octet-stream",
+        description = "The raw value."
+    ),
+    responses(
+        (status = 200, description = "The value was written.", body = SetResponse),
+        (status = 400, description = "Invalid key, query, or body.", body = ErrorEnvelope),
+        (status = 404, description = "`if_value` was given and the key does not exist.", body = ErrorEnvelope),
+        (status = 409, description = "The condition failed; `current` holds the blocking entry.", body = ErrorEnvelope),
+        (status = 413, description = "The value exceeds `--max-value-size`.", body = ErrorEnvelope)
+    )
+)]
 async fn put_value(
     State(state): State<AppState>,
     key: Result<Path<String>, PathRejection>,
@@ -403,6 +468,19 @@ async fn put_value(
 }
 
 /// Handles `POST /api/v1/set` with a JSON `{"key","value"}` body.
+#[utoipa::path(
+    post,
+    path = "/api/v1/set",
+    params(SetQuery),
+    request_body = SetRequest,
+    responses(
+        (status = 200, description = "The value was written.", body = SetResponse),
+        (status = 400, description = "Invalid key, query, or body.", body = ErrorEnvelope),
+        (status = 404, description = "`if_value` was given and the key does not exist.", body = ErrorEnvelope),
+        (status = 409, description = "The condition failed; `current` holds the blocking entry.", body = ErrorEnvelope),
+        (status = 413, description = "The value exceeds `--max-value-size`.", body = ErrorEnvelope)
+    )
+)]
 async fn post_value(
     State(state): State<AppState>,
     query: Result<Query<SetQuery>, QueryRejection>,
@@ -417,11 +495,25 @@ async fn post_value(
 }
 
 /// Handles `DELETE /api/v1/delete/{*key}`.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/delete/{key}",
+    params(
+        DeleteQuery,
+        ("key" = String, Path, description = "Key of 1 to 32 bytes; may contain `/`.")
+    ),
+    responses(
+        (status = 200, description = "The key was deleted.", body = DeleteResponse),
+        (status = 400, description = "Invalid key or query.", body = ErrorEnvelope),
+        (status = 404, description = "The key does not exist.", body = ErrorEnvelope),
+        (status = 409, description = "`if_value` did not match; `current` holds the blocking entry.", body = ErrorEnvelope)
+    )
+)]
 async fn delete_value(
     State(state): State<AppState>,
     key: Result<Path<String>, PathRejection>,
     query: Result<Query<DeleteQuery>, QueryRejection>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<DeleteResponse>, ApiError> {
     let Path(key) = key?;
     let Query(query) = query?;
     validate_key(&key)?;
@@ -431,20 +523,29 @@ async fn delete_value(
         Instant::now(),
     );
     match outcome {
-        DeleteOutcome::Deleted => Ok(Json(serde_json::json!({ "deleted": true }))),
+        DeleteOutcome::Deleted => Ok(Json(DeleteResponse { deleted: true })),
         DeleteOutcome::Conflict(current) => Err(ApiError::conflict(&current)),
         DeleteOutcome::NotFound => Err(not_found_error(&key)),
     }
 }
 
 /// Handles `GET /api/v1/keys`.
+#[utoipa::path(
+    get,
+    path = "/api/v1/keys",
+    params(KeysQuery),
+    responses(
+        (status = 200, description = "Live keys matching the prefix.", body = KeysResponse),
+        (status = 400, description = "Invalid query.", body = ErrorEnvelope)
+    )
+)]
 async fn list_keys(
     State(state): State<AppState>,
     query: Result<Query<KeysQuery>, QueryRejection>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<KeysResponse>, ApiError> {
     let Query(query) = query?;
     let keys = state.store.keys(query.prefix.as_deref(), Instant::now());
-    Ok(Json(serde_json::json!({ "keys": keys })))
+    Ok(Json(KeysResponse { keys }))
 }
 
 /// Error for a key that is not in the store.
@@ -461,10 +562,29 @@ async fn fallback() -> ApiError {
     ApiError::new(StatusCode::NOT_FOUND, "not_found", "no such route")
 }
 
+/// OpenAPI document generated from the handler and type annotations.
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "stow",
+        description = "Minimal local in-memory key-value server for process coordination."
+    ),
+    paths(health, get_value, put_value, post_value, delete_value, list_keys),
+    components(schemas(CurrentBody, ErrorBody, ErrorEnvelope, Format))
+)]
+struct ApiDoc;
+
 /// Builds the application router over `store`.
 ///
-/// Values larger than `max_value_size` bytes are rejected with 413.
-pub fn router(store: Arc<Store>, max_value_size: usize) -> Router {
+/// Values larger than `max_value_size` bytes are rejected with 413. When
+/// `openapi` is true, `GET /api/v1/openapi.json` serves the OpenAPI document,
+/// which is rendered once here.
+///
+/// # Panics
+///
+/// Panics if `openapi` is true and the generated document cannot be
+/// serialized, which would be a bug in the annotations.
+pub fn router(store: Arc<Store>, max_value_size: usize, openapi: bool) -> Router {
     let state = AppState {
         store,
         max_value_size,
@@ -473,7 +593,7 @@ pub fn router(store: Arc<Store>, max_value_size: usize) -> Router {
     // POST body cap leaves room for escaping; the decoded value is re-checked
     // exactly in `post_value`.
     let post_limit = 6 * (max_value_size + MAX_KEY_LEN) + 1024;
-    Router::new()
+    let mut router = Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/get/{*key}", get(get_value))
         .route(
@@ -485,9 +605,22 @@ pub fn router(store: Arc<Store>, max_value_size: usize) -> Router {
             post(post_value).layer(DefaultBodyLimit::max(post_limit)),
         )
         .route("/api/v1/delete/{*key}", delete(delete_value))
-        .route("/api/v1/keys", get(list_keys))
-        .fallback(fallback)
-        .with_state(state)
+        .route("/api/v1/keys", get(list_keys));
+    if openapi {
+        let spec = Bytes::from(
+            ApiDoc::openapi()
+                .to_json()
+                .expect("the OpenAPI document serializes"),
+        );
+        router = router.route(
+            "/api/v1/openapi.json",
+            get(move || {
+                let spec = spec.clone();
+                async move { ([(header::CONTENT_TYPE, "application/json")], spec) }
+            }),
+        );
+    }
+    router.fallback(fallback).with_state(state)
 }
 
 /// Binds a TCP listener on `addr`.
@@ -523,8 +656,9 @@ async fn sweep_loop(store: Arc<Store>) {
 /// A background task sweeps expired entries from `store` while serving.
 /// In-flight requests finish before this returns. [`on_shutdown`] runs after
 /// the server has drained. Values larger than `max_value_size` bytes are
-/// rejected. When `silent` is true, the startup and shutdown messages are not
-/// printed.
+/// rejected. When `openapi` is true, the OpenAPI document is served at
+/// `GET /api/v1/openapi.json`. When `silent` is true, the startup and shutdown
+/// messages are not printed.
 ///
 /// # Errors
 ///
@@ -534,6 +668,7 @@ pub async fn serve(
     store: Arc<Store>,
     shutdown: impl Future<Output = ()> + Send + 'static,
     max_value_size: usize,
+    openapi: bool,
     silent: bool,
 ) -> Result<(), ServerError> {
     let addr = listener.local_addr()?;
@@ -541,7 +676,7 @@ pub async fn serve(
         eprintln!("stow listening on http://{addr}");
     }
     let sweeper = tokio::spawn(sweep_loop(store.clone()));
-    let result = axum::serve(listener, router(store, max_value_size))
+    let result = axum::serve(listener, router(store, max_value_size, openapi))
         .with_graceful_shutdown(shutdown)
         .await;
     sweeper.abort();

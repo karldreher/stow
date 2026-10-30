@@ -87,6 +87,7 @@ impl TestServer {
                 let _ = rx.await;
             },
             max_value_size,
+            false,
             true,
         ));
         Self {

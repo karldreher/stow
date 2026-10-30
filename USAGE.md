@@ -8,7 +8,16 @@ This guide covers the full key-value API and some coordination recipes. For a qu
 stow serve                          # listens on 127.0.0.1:7319
 stow serve --port 8080
 stow serve --max-value-size 65536   # default is 1024 bytes
+stow serve --openapi                # also serves the OpenAPI spec
 stow -q serve                       # no status output; errors still print
+```
+
+## OpenAPI spec
+
+With `--openapi`, the server describes its own API as an OpenAPI 3.1 document. Without the flag the route returns `404`.
+
+```sh
+curl http://127.0.0.1:7319/api/v1/openapi.json
 ```
 
 ## Key-value API

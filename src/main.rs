@@ -36,6 +36,7 @@ async fn serve(args: ServeArgs, silent: bool) -> Result<(), ServerError> {
         Arc::default(),
         server::shutdown_signal(),
         args.max_value_size,
+        args.openapi,
         silent,
     )
     .await
