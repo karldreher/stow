@@ -1,6 +1,7 @@
 //! Command-line interface definitions.
 
 use std::net::IpAddr;
+use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -36,7 +37,7 @@ pub struct Cli {
 pub enum Command {
     /// Start the HTTP server in the foreground.
     #[command(
-        after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --max-value-size 65536\n  stow serve --openapi"
+        after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --max-value-size 65536\n  stow serve --save-file ./stow.bin\n  stow serve --openapi"
     )]
     Serve(ServeArgs),
 }
@@ -61,6 +62,12 @@ pub struct ServeArgs {
     /// Serve the OpenAPI 3.1 document at `GET /api/v1/openapi.json`.
     #[arg(long)]
     pub openapi: bool,
+
+    /// File to load at startup and write on SIGINT/SIGTERM. Without it, stow
+    /// never touches disk. A missing file starts empty; an unreadable one is
+    /// an error and is never overwritten.
+    #[arg(long, value_name = "PATH")]
+    pub save_file: Option<PathBuf>,
 }
 
 /// Parses `--host`, rejecting wildcard addresses.

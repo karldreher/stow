@@ -18,6 +18,7 @@ path = "src/main.rs"
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 bytes = { version = "1", default-features = false }
 clap = { version = "4", features = ["derive"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", default-features = false, features = ["rt", "net", "signal", "macros", "time", "sync"] }
 utoipa = { version = "5", default-features = false, features = ["macros"] }

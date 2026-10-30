@@ -22,6 +22,7 @@ async fn health_returns_ok_and_version() {
         },
         stow::cli::DEFAULT_MAX_VALUE_SIZE,
         false,
+        None,
         true,
     ));
 

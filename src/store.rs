@@ -181,6 +181,44 @@ impl Store {
         before - entries.len()
     }
 
+    /// Returns every live entry with its key, in arbitrary order. O(n) in
+    /// entries plus bytes copied (values are reference-counted, so the byte
+    /// cost is shared with the store).
+    ///
+    /// Persistence uses this to write the store without exposing `Entry`.
+    pub fn snapshot(&self, now: Instant) -> Vec<(String, Current)> {
+        let entries = self.lock();
+        entries
+            .iter()
+            .filter(|(_, entry)| !entry.is_expired(now))
+            .map(|(key, entry)| (key.clone(), entry.current(now)))
+            .collect()
+    }
+
+    /// Inserts entries with their saved versions, replacing any existing key.
+    /// O(n) in the number of entries.
+    ///
+    /// The public `set` always recomputes the version, so persistence needs
+    /// this to bring back versions exactly. Each `(key, value, version, ttl)`
+    /// expires `ttl` after `now`; `None` never expires.
+    pub fn restore(
+        &self,
+        saved: impl IntoIterator<Item = (String, Bytes, u64, Option<Duration>)>,
+        now: Instant,
+    ) {
+        let mut entries = self.lock();
+        for (key, value, version, ttl) in saved {
+            entries.insert(
+                key,
+                Entry {
+                    value,
+                    version,
+                    expires_at: ttl.map(|ttl| now + ttl),
+                },
+            );
+        }
+    }
+
     /// Number of stored entries, including expired ones not yet swept.
     pub fn len(&self) -> usize {
         self.lock().len()
@@ -373,5 +411,28 @@ mod tests {
         assert_eq!(store.len(), 2);
         assert_eq!(store.sweep(now + Duration::from_secs(1)), 1);
         assert_eq!(store.len(), 1);
+    }
+
+    #[test]
+    fn snapshot_skips_expired_entries() {
+        let (store, now) = (Store::default(), Instant::now());
+        let ttl = Some(Duration::from_secs(1));
+        store.set("short".into(), Bytes::new(), ttl, Condition::Always, now);
+        put(&store, "forever", b"v", now);
+        let later = now + Duration::from_secs(2);
+        let snapshot = store.snapshot(later);
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].0, "forever");
+    }
+
+    #[test]
+    fn restore_preserves_version_and_ttl() {
+        let (store, now) = (Store::default(), Instant::now());
+        let ttl = Some(Duration::from_secs(30));
+        store.restore([("k".to_string(), Bytes::from_static(b"v"), 7, ttl)], now);
+        let current = store.get("k", now).unwrap();
+        assert_eq!(current.version, 7);
+        assert_eq!(current.ttl_remaining, ttl);
+        assert_eq!(put(&store, "k", b"w", now), SetOutcome::Written(8));
     }
 }

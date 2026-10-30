@@ -24,6 +24,7 @@ async fn fetch_spec(openapi: bool) -> (String, String) {
         },
         DEFAULT_MAX_VALUE_SIZE,
         openapi,
+        None,
         true,
     ));
 

@@ -88,6 +88,7 @@ impl TestServer {
             },
             max_value_size,
             false,
+            None,
             true,
         ));
         Self {

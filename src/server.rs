@@ -4,6 +4,7 @@ use std::fmt;
 use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -18,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 
+use crate::persist::{self, PersistError};
 use crate::store::{Condition, Current, DeleteOutcome, MAX_KEY_LEN, SetOutcome, Store};
 
 /// Failure to start the server.
@@ -27,6 +29,8 @@ pub enum ServerError {
     PortInUse(u16),
     /// Any other I/O failure while binding or serving.
     Io(io::Error),
+    /// Saving the store to the `--save-file` failed.
+    Persist(PersistError),
 }
 
 impl fmt::Display for ServerError {
@@ -39,7 +43,14 @@ impl fmt::Display for ServerError {
                 )
             }
             Self::Io(err) => write!(f, "{err}"),
+            Self::Persist(err) => write!(f, "{err}"),
         }
+    }
+}
+
+impl From<PersistError> for ServerError {
+    fn from(err: PersistError) -> Self {
+        Self::Persist(err)
     }
 }
 
@@ -655,20 +666,22 @@ async fn sweep_loop(store: Arc<Store>) {
 ///
 /// A background task sweeps expired entries from `store` while serving.
 /// In-flight requests finish before this returns. [`on_shutdown`] runs after
-/// the server has drained. Values larger than `max_value_size` bytes are
-/// rejected. When `openapi` is true, the OpenAPI document is served at
-/// `GET /api/v1/openapi.json`. When `silent` is true, the startup and shutdown
-/// messages are not printed.
+/// the server has drained and writes `save_file` when one is given. Values
+/// larger than `max_value_size` bytes are rejected. When `openapi` is true, the
+/// OpenAPI document is served at `GET /api/v1/openapi.json`. When `silent` is
+/// true, the startup and shutdown messages are not printed.
 ///
 /// # Errors
 ///
-/// Returns [`ServerError::Io`] if the listener fails.
+/// Returns [`ServerError::Io`] if the listener fails, or
+/// [`ServerError::Persist`] if the final save to `save_file` fails.
 pub async fn serve(
     listener: TcpListener,
     store: Arc<Store>,
     shutdown: impl Future<Output = ()> + Send + 'static,
     max_value_size: usize,
     openapi: bool,
+    save_file: Option<PathBuf>,
     silent: bool,
 ) -> Result<(), ServerError> {
     let addr = listener.local_addr()?;
@@ -676,12 +689,12 @@ pub async fn serve(
         eprintln!("stow listening on http://{addr}");
     }
     let sweeper = tokio::spawn(sweep_loop(store.clone()));
-    let result = axum::serve(listener, router(store, max_value_size, openapi))
+    let result = axum::serve(listener, router(store.clone(), max_value_size, openapi))
         .with_graceful_shutdown(shutdown)
         .await;
     sweeper.abort();
     result?;
-    on_shutdown();
+    on_shutdown(&store, save_file.as_deref(), silent)?;
     if !silent {
         eprintln!("stow stopped");
     }
@@ -690,8 +703,27 @@ pub async fn serve(
 
 /// Hook that runs once after the server has drained, before the process exits.
 ///
-/// Empty for now; the `--save-file` feature persists the store here.
-pub fn on_shutdown() {}
+/// Writes the store to `save_file` if one was given; otherwise does nothing
+/// and performs no file I/O. Running after the drain means no request can
+/// change the store during the save.
+///
+/// # Errors
+///
+/// Returns [`ServerError::Persist`] if the save fails.
+pub fn on_shutdown(
+    store: &Store,
+    save_file: Option<&FsPath>,
+    silent: bool,
+) -> Result<(), ServerError> {
+    let Some(path) = save_file else {
+        return Ok(());
+    };
+    let saved = persist::save(path, store, Instant::now())?;
+    if !silent {
+        eprintln!("saved {saved} entries to {}", path.display());
+    }
+    Ok(())
+}
 
 /// Completes when the process receives SIGINT or SIGTERM.
 ///
