@@ -1,6 +1,6 @@
 # Contributing
 
-Code style rules live in [CLAUDE.md](CLAUDE.md).
+Code style rules live in [.claude/CLAUDE.md](.claude/CLAUDE.md).
 
 ## Pull request checks
 
