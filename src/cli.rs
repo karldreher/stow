@@ -7,6 +7,9 @@ use clap::{Args, Parser, Subcommand};
 /// Default TCP port the server listens on.
 pub const DEFAULT_PORT: u16 = 7319;
 
+/// Default maximum value size in bytes.
+pub const DEFAULT_MAX_VALUE_SIZE: usize = 1024;
+
 /// Top-level `stow` command.
 #[derive(Debug, Parser)]
 #[command(
@@ -32,7 +35,9 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Start the HTTP server in the foreground.
-    #[command(after_help = "Examples:\n  stow serve\n  stow serve --port 8080")]
+    #[command(
+        after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --max-value-size 65536"
+    )]
     Serve(ServeArgs),
 }
 
@@ -47,6 +52,11 @@ pub struct ServeArgs {
     /// TCP port to listen on.
     #[arg(long, default_value_t = DEFAULT_PORT)]
     pub port: u16,
+
+    /// Largest value, in bytes, a set request may carry. Larger values get a
+    /// 413 response.
+    #[arg(long, default_value_t = DEFAULT_MAX_VALUE_SIZE)]
+    pub max_value_size: usize,
 }
 
 /// Parses `--host`, rejecting wildcard addresses.
