@@ -1,88 +1,57 @@
 # stow
+<!-- Everthing here is human-grade. No slop!-->
+A small, local, in-memory key-value server. 
 
-Minimally viable KV storage for local use.
+This service is meant for process coordination in **local** and **isolated** environments.  It does not suggest nor intend to have the sophistication of [etcd](https://etcd.io/) or similar projects.  
 
-stow ships as a GitHub Release binary. It is not published to crates.io.
+## What problem does it solve?  
+This is especially build for inter-**Agent** communication on a local device (such as a laptop) or container environments that are isolated.  It is especially built for *parallel agents* that need to agree on state. 
 
-## Usage
+This is a *platform primitive* designed for local use, and intended to be used in flexible ways that can adapt to many different processes that could work in concert with one another.
+
+### Wait.  Why would agents need to agree on state?  
+
+There are many reasons.  
+
+Many things can be virtualized on a computer or used in ways that minimize concurrency concerns, like
+
+- CPUs
+- Networking
+- Databases and instances
+
+While this project does not intend to argue about the [semantics or potential workarounds](https://knowyourmeme.com/memes/ackchyually-actually-guy), some resources have inherently limited capacity or cannot meaningfully be shared simultaneously:
+
+- An entire GPU's capacity.
+- All the RAM on your computer.
+- A monitor that shows information to a user (While multiple windows have been in computing for more than 30 years, the number of eyes available to humans remains bounded, as well as attention span)
+- Audio output.
+- Taking control of the mouse. (Hmmm...)
+- Any process or series of processes that implies order of operations
+
+### Wait.  Why can't i just ask my agent to do it for me? 
+
+Be my guest. 
+
+While there are other ways, including writing to a local filesystem, this project's goal is to provide a *highly performant, minimal* service that may be used in place of *token-implicit* methodology when there are simpler, solution-oriented ways to get to the same result *with better performance*.  This unlocks the ability for agents and other parallel processes to scale, without the waste associated with tooling churn.
+
+
+# Quick start
+
+Start the server. It listens on `127.0.0.1:7319` by default:
 
 ```sh
-stow serve                 # listens on 127.0.0.1:7319
-stow serve --port 8080
-stow -q serve              # no status output; errors still print
-curl http://127.0.0.1:7319/api/v1/health
+stow serve
 ```
 
-## Key-value API
-
-Values are limited to 1024 bytes by default; change it with `stow serve --max-value-size <BYTES>`. Larger values get a `413` response. Keys are 1 to 32 bytes and may contain `/`.
+Then store, read, list, and delete a value:
 
 ```sh
-# set (raw body, or JSON)
 curl -X PUT --data-binary 'hello' http://127.0.0.1:7319/api/v1/set/greeting
-curl -X POST -H 'Content-Type: application/json' \
-  -d '{"key": "lock/build", "value": "agent-1"}' http://127.0.0.1:7319/api/v1/set
-
-# get (raw bytes, or JSON with key, value, and version)
 curl http://127.0.0.1:7319/api/v1/get/greeting
-curl 'http://127.0.0.1:7319/api/v1/get/greeting?format=json'
-
-# list (prefix is optional)
-curl 'http://127.0.0.1:7319/api/v1/keys?prefix=lock/'
-
-# delete
+curl http://127.0.0.1:7319/api/v1/keys
 curl -X DELETE http://127.0.0.1:7319/api/v1/delete/greeting
 ```
 
-Set and delete accept conditions that are checked atomically with the write:
+Data lives in memory only and is lost when the server stops.
 
-| Parameter | Applies to | Effect |
-|-----------|-----------|--------|
-| `if_absent=true` | set | Write only if the key is absent; otherwise `409`. |
-| `if_value=<v>` | set, delete | Proceed only if the current value is exactly `<v>`; `409` on mismatch, `404` if the key is absent. |
-| `ttl=<seconds>` | set | Expire the key after 1 to 86400 seconds. A set without `ttl` clears any existing TTL. |
-
-`if_absent` and `if_value` cannot be combined. A `409` response includes the blocking entry: `{"error":{"code":"conflict",...},"current":{"value","version","ttl_remaining_ms"}}` (`value` is `null` if it is not UTF-8). `GET ...?format=json` includes `ttl_remaining_ms` (`null` when the key has no TTL). Expired keys are treated as absent immediately and freed by a sweep that runs every second. Expiry uses a monotonic clock.
-
-Errors use one envelope: `{"error":{"code":"not_found","message":"..."}}`. `format=json` on a value that is not valid UTF-8 returns `406`; fetch it without `format`.
-
-## Coordination recipes
-
-Each condition is checked and applied in one step under the store lock, so exactly one concurrent caller wins.
-
-**Consensus (first writer wins).** 
-Each caller proposes a value; losers get `409` and adopt the winner's value from `current`.
-
-```sh
-curl -s -w '\n%{http_code}\n' -X PUT --data-binary 'plan-b' \
-  'http://127.0.0.1:7319/api/v1/set/decision?if_absent=true'
-# 200 {"key":"decision","version":1}   you won
-# 409 {"error":{...},"current":{"value":"plan-a",...}}   adopt "plan-a"
-```
-
-**Mutex with a lease.** Use a unique owner token as the value and a TTL so a crashed holder cannot block everyone.
-
-```sh
-OWNER=agent-$$
-# acquire (200 = you hold the lock, 409 = someone else does)
-curl -X PUT --data-binary "$OWNER" 'http://127.0.0.1:7319/api/v1/set/lock/build?if_absent=true&ttl=60'
-
-# renew before the lease runs out; 409 or 404 means you lost it
-curl -X PUT --data-binary "$OWNER" "http://127.0.0.1:7319/api/v1/set/lock/build?if_value=$OWNER&ttl=60"
-
-# release; only deletes if you still own it
-curl -X DELETE "http://127.0.0.1:7319/api/v1/delete/lock/build?if_value=$OWNER"
-```
-
-**Back off on 409.** There is no blocking acquire; poll with exponential back-off and jitter.
-
-```sh
-delay=1
-until curl -sf -X PUT --data-binary "$OWNER" \
-    'http://127.0.0.1:7319/api/v1/set/lock/build?if_absent=true&ttl=60' >/dev/null; do
-  sleep "$delay"
-  delay=$(( delay < 30 ? delay * 2 : 30 ))
-done
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) to build from source.
+For more examples, including conditional writes, expiring leases, and the full API reference, see [USAGE.md](USAGE.md).
