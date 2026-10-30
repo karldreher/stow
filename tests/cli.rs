@@ -36,3 +36,13 @@ fn max_value_size_defaults_to_1024_and_is_configurable() {
     assert_eq!(size(&["stow", "serve"]), 1024);
     assert_eq!(size(&["stow", "serve", "--max-value-size", "65536"]), 65536);
 }
+
+#[test]
+fn save_file_is_optional_and_takes_a_path() {
+    let without = Cli::try_parse_from(["stow", "serve"]).unwrap();
+    let with = Cli::try_parse_from(["stow", "serve", "--save-file", "dir/state.bin"]).unwrap();
+    let (stow::cli::Command::Serve(without), stow::cli::Command::Serve(with)) =
+        (without.command, with.command);
+    assert_eq!(without.save_file, None);
+    assert_eq!(with.save_file, Some("dir/state.bin".into()));
+}
