@@ -81,7 +81,8 @@ pub async fn bind(addr: SocketAddr) -> Result<TcpListener, ServerError> {
 /// Serves the API on `listener` until `shutdown` completes.
 ///
 /// In-flight requests finish before this returns. [`on_shutdown`] runs after
-/// the server has drained.
+/// the server has drained. When `silent` is true, the startup and shutdown
+/// messages are not printed.
 ///
 /// # Errors
 ///
@@ -89,13 +90,19 @@ pub async fn bind(addr: SocketAddr) -> Result<TcpListener, ServerError> {
 pub async fn serve(
     listener: TcpListener,
     shutdown: impl Future<Output = ()> + Send + 'static,
+    silent: bool,
 ) -> Result<(), ServerError> {
-    eprintln!("stow listening on http://{}", listener.local_addr()?);
+    let addr = listener.local_addr()?;
+    if !silent {
+        eprintln!("stow listening on http://{addr}");
+    }
     axum::serve(listener, router())
         .with_graceful_shutdown(shutdown)
         .await?;
     on_shutdown();
-    eprintln!("stow stopped");
+    if !silent {
+        eprintln!("stow stopped");
+    }
     Ok(())
 }
 

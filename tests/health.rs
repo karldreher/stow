@@ -14,9 +14,13 @@ async fn health_returns_ok_and_version() {
         .unwrap();
     let addr = listener.local_addr().unwrap();
     let (tx, rx) = oneshot::channel::<()>();
-    let handle = tokio::spawn(server::serve(listener, async move {
-        let _ = rx.await;
-    }));
+    let handle = tokio::spawn(server::serve(
+        listener,
+        async move {
+            let _ = rx.await;
+        },
+        true,
+    ));
 
     let mut stream = TcpStream::connect(addr).await.unwrap();
     stream
