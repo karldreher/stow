@@ -14,9 +14,15 @@ pub const DEFAULT_PORT: u16 = 7319;
     version,
     about = "Minimal local in-memory key-value server for agent coordination",
     arg_required_else_help = true,
-    after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --host 127.0.0.1 --port 9000"
+    after_help = "Examples:\n  stow serve\n  stow serve --port 8080\n  stow serve --host 127.0.0.1 --port 9000\n  stow -q serve"
 )]
 pub struct Cli {
+    /// Suppress status messages (startup and shutdown). Errors still print to
+    /// stderr and the exit code is unchanged. Accepted before or after the
+    /// subcommand.
+    #[arg(short = 'q', long = "silent", global = true)]
+    pub silent: bool,
+
     /// Subcommand to run.
     #[command(subcommand)]
     pub command: Command,

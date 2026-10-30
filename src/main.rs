@@ -16,7 +16,7 @@ use stow::server::{self, ServerError};
 async fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
-        Command::Serve(args) => serve(args).await,
+        Command::Serve(args) => serve(args, cli.silent).await,
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -28,7 +28,7 @@ async fn main() -> ExitCode {
 }
 
 /// Runs `stow serve`.
-async fn serve(args: ServeArgs) -> Result<(), ServerError> {
+async fn serve(args: ServeArgs, silent: bool) -> Result<(), ServerError> {
     let listener = server::bind(SocketAddr::new(args.host, args.port)).await?;
-    server::serve(listener, server::shutdown_signal()).await
+    server::serve(listener, server::shutdown_signal(), silent).await
 }

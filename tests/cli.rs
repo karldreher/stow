@@ -17,3 +17,12 @@ fn host_accepts_loopback_addresses() {
         assert!(Cli::try_parse_from(["stow", "serve", "--host", host]).is_ok());
     }
 }
+
+#[test]
+fn silent_flag_is_accepted_before_and_after_the_subcommand() {
+    for args in [["stow", "-q", "serve"], ["stow", "serve", "--silent"]] {
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert!(cli.silent, "{args:?}");
+    }
+    assert!(!Cli::try_parse_from(["stow", "serve"]).unwrap().silent);
+}
