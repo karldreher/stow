@@ -7,7 +7,7 @@
 #                     (default: the latest published release)
 #   STOW_BASE_URL     where to download the archive and SHA256SUMS from
 #                     (default: the GitHub Release for the chosen version).
-#                     Useful for testing a draft release's assets.
+#                     Useful for testing downloaded assets.
 set -eu
 
 REPO="karldreher/stow"

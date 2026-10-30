@@ -68,7 +68,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: draft release
+    name: publish release
     needs: build
     runs-on: ubuntu-24.04
     steps:
@@ -80,13 +80,12 @@ jobs:
       - name: Write checksums
         run: sha256sum stow-*.tar.gz > SHA256SUMS
 
-      - name: Create draft release
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
-            --draft \
             --title "stow $GITHUB_REF_NAME" \
-            --notes "See CHANGELOG.md for details." \
+            --generate-notes \
             stow-*.tar.gz SHA256SUMS
