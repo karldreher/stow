@@ -56,3 +56,10 @@ fn save_file_is_optional_and_takes_a_path() {
     assert_eq!(without.save_file, None);
     assert_eq!(with.save_file, Some("dir/state.bin".into()));
 }
+
+#[test]
+fn version_flag_prints_the_crate_version() {
+    let err = Cli::try_parse_from(["stow", "--version"]).unwrap_err();
+    assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+    assert!(err.to_string().contains(env!("CARGO_PKG_VERSION")), "{err}");
+}

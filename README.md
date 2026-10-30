@@ -35,6 +35,22 @@ Be my guest.
 While there are other ways, including writing to a local filesystem, this project's goal is to provide a *highly performant, minimal* service that may be used in place of *token-implicit* methodology when there are simpler, solution-oriented ways to get to the same result *with better performance*.  This unlocks the ability for agents and other parallel processes to scale, without the waste associated with tooling churn.
 
 
+# Install
+
+Install the latest release (macOS and Linux, arm64 and x86_64) to `~/.local/bin`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/karldreher/stow/main/scripts/install.sh | sh
+```
+
+The script checks the download against the release's `SHA256SUMS` before installing. Set `STOW_INSTALL_DIR` to install somewhere else, or `STOW_VERSION` (for example `0.1.0`) to install a specific version.
+
+With a Rust toolchain you can build from source instead:
+
+```sh
+cargo install --git https://github.com/karldreher/stow
+```
+
 # Quick start
 
 Start the server. It listens on `127.0.0.1:7319` by default:
