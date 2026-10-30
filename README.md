@@ -37,13 +37,7 @@ While there are other ways, including writing to a local filesystem, this projec
 
 # Install
 
-Install the latest release (macOS and Linux, arm64 and x86_64) to `~/.local/bin`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/karldreher/stow/main/scripts/install.sh | sh
-```
-
-The script checks the download against the release's `SHA256SUMS` before installing. Set `STOW_INSTALL_DIR` to install somewhere else, or `STOW_VERSION` (for example `0.1.0`) to install a specific version.
+Download the archive for your platform (macOS and Linux, arm64 and x86_64) from the [releases page](https://github.com/karldreher/stow/releases). Extract the archive and put the `stow` binary somewhere on your `PATH`.
 
 With a Rust toolchain you can build from source instead:
 
