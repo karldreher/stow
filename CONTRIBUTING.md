@@ -9,7 +9,7 @@ Every pull request must pass these checks, defined in `.github/workflows/ci.yml`
 ```sh
 # lint
 cargo fmt --all --check
-cargo clippy --all-targets --locked -- -D warnings
+cargo clippy --all-targets --locked -- -D warnings  # also fails on missing doc comments
 
 # tests
 cargo test --locked --verbose
