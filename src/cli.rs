@@ -11,6 +11,11 @@ pub const DEFAULT_PORT: u16 = 7319;
 /// Default maximum value size in bytes.
 pub const DEFAULT_MAX_VALUE_SIZE: usize = 1024;
 
+/// Hard ceiling for `--max-value-size`, in bytes (1 MiB). stow is a
+/// coordination primitive, not a blob store, so larger values are refused at
+/// startup rather than accepted.
+pub const MAX_VALUE_SIZE_CEILING: usize = 1024 * 1024;
+
 /// Top-level `stow` command.
 #[derive(Debug, Parser)]
 #[command(
@@ -54,9 +59,9 @@ pub struct ServeArgs {
     #[arg(long, default_value_t = DEFAULT_PORT)]
     pub port: u16,
 
-    /// Largest value, in bytes, a set request may carry. Larger values get a
-    /// 413 response.
-    #[arg(long, default_value_t = DEFAULT_MAX_VALUE_SIZE)]
+    /// Largest value, in bytes, a set request may carry, up to 1048576 (1
+    /// MiB). Larger values get a 413 response.
+    #[arg(long, default_value_t = DEFAULT_MAX_VALUE_SIZE, value_parser = parse_max_value_size)]
     pub max_value_size: usize,
 
     /// Serve the OpenAPI 3.1 document at `GET /api/v1/openapi.json`.
@@ -84,4 +89,21 @@ fn parse_host(value: &str) -> Result<IpAddr, String> {
         ));
     }
     Ok(ip)
+}
+
+/// Parses `--max-value-size`, rejecting anything above
+/// [`MAX_VALUE_SIZE_CEILING`].
+///
+/// # Errors
+///
+/// Returns a message if `value` is not a whole number of bytes or exceeds the
+/// 1 MiB ceiling.
+fn parse_max_value_size(value: &str) -> Result<usize, String> {
+    let size: usize = value.parse().map_err(|err| format!("{err}"))?;
+    if size > MAX_VALUE_SIZE_CEILING {
+        return Err(format!(
+            "{size} is above the {MAX_VALUE_SIZE_CEILING}-byte (1 MiB) limit; stow is for small coordination values, not large payloads"
+        ));
+    }
+    Ok(size)
 }

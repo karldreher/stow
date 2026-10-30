@@ -475,7 +475,10 @@ async fn put_value(
             err
         }
     })?;
-    write(&state, key, value, &query)
+    // A raw body is a view into the connection's read buffer, which is much
+    // larger than a small value. Copying lets that buffer be freed instead of
+    // staying pinned for as long as the key lives.
+    write(&state, key, Bytes::copy_from_slice(&value), &query)
 }
 
 /// Handles `POST /api/v1/set` with a JSON `{"key","value"}` body.

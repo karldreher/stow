@@ -85,6 +85,19 @@ pub enum DeleteOutcome {
     NotFound,
 }
 
+/// Returns the map's spare capacity to the allocator once fewer than a
+/// quarter of its slots are in use.
+///
+/// A `HashMap` never shrinks on its own, so without this a burst of keys pins
+/// the table at its peak size for the life of the process. Shrinking is O(n),
+/// but it leaves capacity close to `len`, so the next shrink needs `len` to
+/// fall by about 4x again. That keeps the cost amortized O(1) per delete.
+fn shrink_if_sparse(entries: &mut HashMap<String, Entry>) {
+    if entries.len() < entries.capacity() / 4 {
+        entries.shrink_to_fit();
+    }
+}
+
 /// Thread-safe map from key to a stored value with its metadata.
 ///
 /// One lock serializes every operation, so all operations are linearizable
@@ -154,6 +167,7 @@ impl Store {
             return DeleteOutcome::Conflict(entry.current(now));
         }
         entries.remove(key);
+        shrink_if_sparse(&mut entries);
         DeleteOutcome::Deleted
     }
 
@@ -178,6 +192,7 @@ impl Store {
         let mut entries = self.lock();
         let before = entries.len();
         entries.retain(|_, entry| !entry.is_expired(now));
+        shrink_if_sparse(&mut entries);
         before - entries.len()
     }
 
@@ -411,6 +426,39 @@ mod tests {
         assert_eq!(store.len(), 2);
         assert_eq!(store.sweep(now + Duration::from_secs(1)), 1);
         assert_eq!(store.len(), 1);
+    }
+
+    /// Current capacity of the underlying map.
+    fn capacity(store: &Store) -> usize {
+        store.lock().capacity()
+    }
+
+    #[test]
+    fn delete_shrinks_the_map_after_a_mass_delete() {
+        let (store, now) = (Store::default(), Instant::now());
+        for i in 0..10_000 {
+            put(&store, &format!("k{i}"), b"", now);
+        }
+        let peak = capacity(&store);
+        for i in 10..10_000 {
+            store.delete(&format!("k{i}"), None, now);
+        }
+        assert_eq!(store.len(), 10);
+        assert!(capacity(&store) < peak / 4, "capacity stayed at {peak}");
+    }
+
+    #[test]
+    fn sweep_shrinks_the_map_after_mass_expiry() {
+        let (store, now) = (Store::default(), Instant::now());
+        let ttl = Some(Duration::from_secs(1));
+        for i in 0..10_000 {
+            store.set(format!("k{i}"), Bytes::new(), ttl, Condition::Always, now);
+        }
+        put(&store, "keep", b"", now);
+        let peak = capacity(&store);
+        store.sweep(now + Duration::from_secs(1));
+        assert_eq!(store.len(), 1);
+        assert!(capacity(&store) < peak / 4, "capacity stayed at {peak}");
     }
 
     #[test]

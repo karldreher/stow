@@ -55,3 +55,15 @@ curl -X DELETE http://127.0.0.1:7319/api/v1/delete/greeting
 Data lives in memory only and is lost when the server stops, unless you pass `--save-file <PATH>` to restore it on the next start (see [USAGE.md](USAGE.md)).
 
 For more examples, including conditional writes, expiring leases, and the full API reference, see [USAGE.md](USAGE.md).
+
+# Memory
+
+`stow` has the capability to run many instances side by side, so it keeps memory small.  The key table shrinks after large deletes and expiry sweeps.
+
+Measured on macOS arm64 with a release build (RSS from `ps`):
+
+| State | RSS |
+|-------|-----|
+| Idle | about 2.3 MB |
+| 10,000 keys with 1 KiB values | about 14 MB |
+

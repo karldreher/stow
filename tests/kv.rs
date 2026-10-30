@@ -340,6 +340,29 @@ async fn value_over_limit_returns_413() {
 }
 
 #[tokio::test]
+async fn oversized_body_is_rejected_without_waiting_for_the_rest() {
+    let server = TestServer::start(DEFAULT_MAX_VALUE_SIZE).await;
+    let mut stream = TcpStream::connect(server.addr).await.unwrap();
+    // Declares 1 GiB but sends only one byte past the limit: a 413 can only
+    // come back if the server stops reading at the limit instead of buffering
+    // the whole body.
+    let head =
+        "PUT /api/v1/set/k HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1073741824\r\n\r\n";
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream
+        .write_all(&[b'x'; DEFAULT_MAX_VALUE_SIZE + 1])
+        .await
+        .unwrap();
+    let mut buf = [0u8; 256];
+    let read = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buf))
+        .await
+        .expect("server waited for the body instead of rejecting it")
+        .unwrap();
+    assert!(String::from_utf8_lossy(&buf[..read]).starts_with("HTTP/1.1 413"));
+    server.stop().await;
+}
+
+#[tokio::test]
 async fn default_limit_is_1024_bytes() {
     let server = TestServer::start(DEFAULT_MAX_VALUE_SIZE).await;
     assert_eq!(server.put("/api/v1/set/k", &[b'x'; 1024]).await.status, 200);

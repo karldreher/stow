@@ -23,7 +23,7 @@ curl http://127.0.0.1:7319/api/v1/openapi.json
 
 ## Key-value API
 
-Values are limited to 1024 bytes by default; change it with `stow serve --max-value-size <BYTES>`. Larger values get a `413` response. Keys are 1 to 32 bytes and may contain `/`.
+Values are limited to 1024 bytes by default; change it with `stow serve --max-value-size <BYTES>`, up to 1048576 (1 MiB); larger settings are refused at startup. Values over the limit get a `413` response. Keys are 1 to 32 bytes and may contain `/`.
 
 ## Save file
 
