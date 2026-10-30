@@ -54,6 +54,7 @@ async fn serve(args: ServeArgs, silent: bool) -> Result<(), ServerError> {
         store,
         server::shutdown_signal(),
         args.max_value_size,
+        args.openapi,
         args.save_file,
         silent,
     )

@@ -38,6 +38,16 @@ fn max_value_size_defaults_to_1024_and_is_configurable() {
 }
 
 #[test]
+fn openapi_flag_defaults_to_off() {
+    use stow::cli::Command;
+    let openapi = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+        Command::Serve(serve) => serve.openapi,
+    };
+    assert!(!openapi(&["stow", "serve"]));
+    assert!(openapi(&["stow", "serve", "--openapi"]));
+}
+
+#[test]
 fn save_file_is_optional_and_takes_a_path() {
     let without = Cli::try_parse_from(["stow", "serve"]).unwrap();
     let with = Cli::try_parse_from(["stow", "serve", "--save-file", "dir/state.bin"]).unwrap();
