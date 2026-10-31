@@ -11,24 +11,37 @@ use std::time::Instant;
 
 use clap::Parser;
 use stow::cli::{Cli, Command, ServeArgs};
+use stow::client;
 use stow::persist;
 use stow::server::{self, ServerError};
 use stow::store::Store;
 
-/// Parses arguments, runs the selected command, and maps failure to exit code 1.
+/// Parses arguments and runs the selected command.
+///
+/// `serve` failures exit 1. Client commands use the exit codes documented on
+/// [`client::ExitStatus`].
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    let result = match cli.command {
-        Command::Serve(args) => serve(args, cli.silent).await,
-    };
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            eprintln!("error: {err}");
-            ExitCode::FAILURE
+    let mut stdout = std::io::stdout();
+    let status = match cli.command {
+        Command::Serve(args) => {
+            return match serve(args, cli.silent).await {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    ExitCode::FAILURE
+                }
+            };
         }
-    }
+        Command::Get(args) => client::get(args, &mut stdout).await,
+        Command::Set(args) => client::set(args).await,
+        Command::Del(args) => client::del(args).await,
+        Command::Keys(args) => client::keys(args, &mut stdout).await,
+        Command::Lock(args) => client::lock(args, &mut stdout).await,
+        Command::Unlock(args) => client::unlock(args).await,
+    };
+    status.into()
 }
 
 /// Runs `stow serve`.

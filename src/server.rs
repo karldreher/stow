@@ -356,11 +356,11 @@ struct DeleteResponse {
     deleted: bool,
 }
 
-/// Body of `GET /api/v1/keys`.
-#[derive(Serialize, ToSchema)]
-struct KeysResponse {
+/// Body of `GET /api/v1/keys`; the client decodes it with the same type.
+#[derive(Serialize, Deserialize, ToSchema)]
+pub(crate) struct KeysResponse {
     /// Live keys matching the prefix.
-    keys: Vec<String>,
+    pub(crate) keys: Vec<String>,
 }
 
 /// Handles `GET /api/v1/get/{*key}`.
