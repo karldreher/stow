@@ -62,6 +62,33 @@ curl http://127.0.0.1:7319/api/v1/keys
 curl -X DELETE http://127.0.0.1:7319/api/v1/delete/greeting
 ```
 
+The same binary is also a client, so you can skip `curl`:
+
+```sh
+stow set greeting hello
+stow get greeting
+stow keys
+stow del greeting
+```
+
+Client commands talk to `127.0.0.1:7319` by default. Use `--addr HOST:PORT` or the `STOW_ADDR` environment variable to reach another instance.
+
+## Waiting
+
+`stow get --wait-for` blocks until a key reaches a state you describe. `stow lock --wait` blocks until you hold a mutex. They do different jobs:
+
+- `get --wait-for` only observes a key and never changes it, so it cannot acquire anything. Use it to wait on state you do not plan to claim, such as a published value, a task status, or a lock someone else releases.
+- `lock` and `lock --wait` are the only way to take a mutex, because the check and the write are one atomic step.
+- `get --wait-for absent && stow lock ...` is racy: every waiter wakes at once and the losers get a conflict. Use `lock --wait` instead.
+
+```sh
+stow lock lock/build --ttl 60 --wait
+stow get build-sha --wait-for present
+stow get task-42/status --wait-for value=done --timeout 300
+```
+
+Waiting is polling with back-off, so the server stays simple and small. See [USAGE.md](USAGE.md) for conditions, timeouts, and exit codes.
+
 Data lives in memory only and is lost when the server stops, unless you pass `--save-file <PATH>` to restore it on the next start (see [USAGE.md](USAGE.md)).
 
 For more examples, including conditional writes, expiring leases, and the full API reference, see [USAGE.md](USAGE.md).
@@ -74,6 +101,6 @@ Measured on macOS arm64 with a release build (RSS from `ps`):
 
 | State | RSS |
 |-------|-----|
-| Idle | about 2.3 MB |
+| Idle | about 2.5 MB |
 | 10,000 keys with 1 KiB values | about 14 MB |
 

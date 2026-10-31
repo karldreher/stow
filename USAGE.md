@@ -25,6 +25,70 @@ curl http://127.0.0.1:7319/api/v1/openapi.json
 
 Values are limited to 1024 bytes by default; change it with `stow serve --max-value-size <BYTES>`, up to 1048576 (1 MiB); larger settings are refused at startup. Values over the limit get a `413` response. Keys are 1 to 32 bytes and may contain `/`.
 
+## Client commands
+
+The `stow` binary can call its own API, so no `curl` is needed. Every client command accepts `--addr HOST:PORT` (default `127.0.0.1:7319`, or the `STOW_ADDR` environment variable).
+
+```sh
+stow set greeting hello                       # value "-" reads stdin
+stow set decision plan-b --if-absent --ttl 60
+stow get greeting                             # raw bytes on stdout
+stow keys --prefix lock/                      # one key per line
+stow del greeting --if-value hello
+stow lock lock/build --ttl 60                 # prints the owner token
+stow unlock lock/build --owner stow-1234
+```
+
+`set` takes `--ttl`, `--if-absent`, and `--if-value`, with the same meaning as the query parameters above. `del` takes `--if-value`.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Key not found, or any other failure (the message is on stderr) |
+| 2 | Conflict: a condition did not hold (`409`) |
+| 3 | Server unreachable |
+| 4 | Timed out waiting |
+
+### Waiting for a key
+
+`get <key> --wait-for <condition>` polls until the condition holds, prints the value (nothing for `absent`), and exits 0.
+
+| Condition | Holds when |
+|-----------|-----------|
+| `present` | The key exists and has not expired. |
+| `absent` | The key does not exist. A delete and a TTL expiry both count. If it is already absent, the command exits at once. |
+| `value=<v>` | The value equals `<v>` byte for byte, the same rule as `if_value`. |
+
+```sh
+stow get build-sha --wait-for present
+stow get task-42/status --wait-for value=done --timeout 300
+```
+
+Without `--wait-for`, `get` returns immediately and exits 1 if the key is missing.
+
+### Taking a lock
+
+`lock <key> --ttl N` makes one attempt to write your owner token with `if_absent=true`. It prints the token and exits 0, or exits 2 if someone else holds the lock. Without `--owner`, the token is `stow-<pid>`.
+
+`lock <key> --ttl N --wait` keeps trying until it holds the lock. It polls the key until it is absent, then makes the same atomic write; if another waiter wins that race, it goes back to waiting. The lease frees itself after the TTL if the holder never calls `unlock`.
+
+```sh
+stow lock lock/build --ttl 60 --wait
+```
+
+`get --wait-for` observes and `lock` acquires. Waiting for `absent` and then calling `lock` is racy, because every waiter wakes together and the losers get a conflict. Use `lock --wait` to take a mutex, and `get --wait-for` for state you do not plan to claim.
+
+### Timeouts and polling
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--timeout <seconds>` | 60 | Give up and exit 4 after this long. `0` waits indefinitely. |
+| `--interval <ms>` | 250 | First pause between polls. It doubles after each poll up to 2000 ms. |
+
+Each pause also gets up to 50% extra random delay, so waiters started together spread out instead of waking in lockstep. Each poll is a single `GET`, and at the default interval a waiter sends at most about four requests per second. If the server is unreachable during a wait, the command exits 3 at once without retrying.
+
 ## Save file
 
 Without `--save-file`, stow never touches disk. With `stow serve --save-file <PATH>`, stow loads the file at startup and writes it once on SIGINT or SIGTERM. Missing parent directories are created.
@@ -90,7 +154,7 @@ curl -X PUT --data-binary "$OWNER" "http://127.0.0.1:7319/api/v1/set/lock/build?
 curl -X DELETE "http://127.0.0.1:7319/api/v1/delete/lock/build?if_value=$OWNER"
 ```
 
-**Back off on 409.** There is no blocking acquire; poll with exponential back-off and jitter.
+**Back off on 409.** With `curl`, there is no blocking acquire; poll with exponential back-off and jitter. The `stow lock --wait` command does this for you (see [Client commands](#client-commands)).
 
 ```sh
 delay=1
